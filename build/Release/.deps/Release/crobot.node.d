@@ -1,1 +1,0 @@
-cmd_Release/crobot.node := c++ -bundle -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=10.13 -arch arm64 -L./Release -stdlib=libc++  -o Release/crobot.node Release/obj.target/crobot/src/addon.o Release/nothing.a -framework ApplicationServices
