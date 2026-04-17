@@ -1,6 +1,11 @@
 # c-robot
 
-通过 Node.js 调用 C++ 原生插件，实现鼠标左键/右键点击、获取坐标、移动鼠标（多端：macOS / Windows / Linux）。
+通过 Node.js 调用 C++ 原生插件，实现鼠标与键盘事件。
+
+兼容与打包编译目标（以此为准）：
+
+- macOS Apple Silicon（arm64）
+- Windows x64
 
 ## 前置条件
 
@@ -16,11 +21,9 @@
 
 - 需要可用的 C++ 构建环境（例如安装 Visual Studio Build Tools）
 
-### Linux
+### Linux（不保证兼容）
 
-- 目前实现基于 X11（Wayland 环境可能不可用）
-- 需要安装依赖（以 Debian/Ubuntu 为例）：
-  - `sudo apt-get install -y libx11-dev libxtst-dev`
+- 代码里保留了基于 X11 的实现，但不作为兼容/打包编译目标
 
 开发流程（需求 → 开发 → 测试 → 编译 → 发布）：见 `DEVELOPMENT.md`。
 

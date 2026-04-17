@@ -2,7 +2,9 @@
 
 本文档以本仓库（macOS + Node.js 原生插件 N-API）为例，给出一套可执行的端到端流程。
 
-当前代码已支持多端：macOS / Windows / Linux（Linux 以 X11 为主，Wayland 可能不可用）。
+兼容与打包编译目标（以此为准）：macOS Apple Silicon（arm64）与 Windows x64。
+
+备注：代码中保留了 Linux（X11）实现，但不作为兼容/打包编译目标。
 
 ## 1. 需求（Requirement）
 
@@ -23,9 +25,7 @@
   - `xcode-select --install`
 - Node.js：建议 18/20/22
 
-Linux 额外依赖（Debian/Ubuntu）：
-
-- `sudo apt-get install -y libx11-dev libxtst-dev`
+（可选）如果你本地要在 Linux 上尝试：需要 X11 相关依赖，但不保证兼容。
 
 ### 本地开发命令
 

@@ -10,25 +10,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-        node: [18, 20, 22]
+        os: [macos-14, windows-latest]
+        node: [20, 22]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node (macOS)
+        if: runner.os == 'macOS'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Setup Node (Windows x64)
+        if: runner.os == 'Windows'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          architecture: x64
+
       - name: Install dependencies
         run: npm install
-
-      - name: Install Linux native deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev libxtst-dev
 
       - name: Build + test
         run: npm test

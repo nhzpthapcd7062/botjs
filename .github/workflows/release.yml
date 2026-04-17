@@ -6,12 +6,8 @@ on:
       - "v*.*.*"
 
 jobs:
-  build-test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+  build-macos-arm64:
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
@@ -24,18 +20,51 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Linux native deps
-        if: runner.os == 'Linux'
+      - name: Build + test
+        run: npm test
+
+      - name: Prepare native asset
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev libxtst-dev
+          cp build/Release/crobot.node crobot-darwin-arm64.node
+
+      - name: Upload native asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-darwin-arm64
+          path: crobot-darwin-arm64.node
+
+  build-windows-x64:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node (x64)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          architecture: x64
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Build + test
         run: npm test
 
+      - name: Prepare native asset
+        shell: bash
+        run: |
+          cp build/Release/crobot.node crobot-win32-x64.node
+
+      - name: Upload native asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-win32-x64
+          path: crobot-win32-x64.node
+
   github-release:
-    runs-on: macos-latest
-    needs: build-test
+    runs-on: macos-14
+    needs: [build-macos-arm64, build-windows-x64]
 
     permissions:
       contents: write
@@ -54,8 +83,19 @@ jobs:
       - name: Pack
         run: npm pack
 
+      - name: Download native assets
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -R ./artifacts
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "*.tgz"
+          files: |
+            *.tgz
+            artifacts/native-darwin-arm64/crobot-darwin-arm64.node
+            artifacts/native-win32-x64/crobot-win32-x64.node
           generate_release_notes: true
