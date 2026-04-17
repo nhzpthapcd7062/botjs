@@ -100,8 +100,6 @@ void PostKeyEvent(NativeKeyCode key, bool down) {
 
 #elif defined(_WIN32)
 
-#elif defined(_WIN32)
-
 Point GetCurrentMouseLocation() {
   POINT pt;
   if (!GetCursorPos(&pt)) {
