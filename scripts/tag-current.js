@@ -28,9 +28,20 @@ try {
         process.exit(1);
     }
 
-    execFileSync('git', ['tag', tag], { stdio: 'inherit' });
+    // Use annotated tag so it can be pushed by --follow-tags and is more release-friendly.
+    execFileSync('git', ['tag', '-a', tag, '-m', tag], { stdio: 'inherit' });
     console.log(`Created tag: ${tag}`);
-    console.log('Next: git push --follow-tags');
+
+    const remotes = sh('git', ['remote']);
+    if (!remotes) {
+        console.log('No git remote configured; skip pushing tag.');
+        process.exit(0);
+    }
+
+    const hasOrigin = remotes.split(/\s+/).includes('origin');
+    const remoteName = hasOrigin ? 'origin' : remotes.split(/\s+/)[0];
+    execFileSync('git', ['push', remoteName, tag], { stdio: 'inherit' });
+    console.log(`Pushed tag to ${remoteName}: ${tag}`);
 } catch (err) {
     console.error(err && err.message ? err.message : err);
     process.exit(1);

@@ -13,9 +13,9 @@
         "demo": "node demo.js",
         "pack": "npm pack",
         "release:tag": "npm run test && node scripts/tag-current.js && npm run pack",
-        "release:patch": "npm run test && npm version patch -m \"chore(release): v%s\" && npm run pack",
-        "release:minor": "npm run test && npm version minor -m \"chore(release): v%s\" && npm run pack",
-        "release:major": "npm run test && npm version major -m \"chore(release): v%s\" && npm run pack"
+        "release:patch": "npm run test && npm version patch -m \"chore(release): v%s\" && git push --follow-tags && npm run pack",
+        "release:minor": "npm run test && npm version minor -m \"chore(release): v%s\" && git push --follow-tags && npm run pack",
+        "release:major": "npm run test && npm version major -m \"chore(release): v%s\" && git push --follow-tags && npm run pack"
     },
     "dependencies": {
         "node-addon-api": "^8.5.0"

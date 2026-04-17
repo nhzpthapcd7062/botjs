@@ -73,11 +73,7 @@
 - 发布次版本：`npm run release:minor`
 - 发布主版本：`npm run release:major`
 
-这些命令会：测试 →（可选）升级版本并打 tag → `npm pack` 产出 `*.tgz`。
-
-将 tag 推送到远端后：
-
-- `git push --follow-tags`
+这些命令会：测试 →（可选）升级版本并打 tag → 推送提交/tag（如果配置了 remote）→ `npm pack` 产出 `*.tgz`。
 
 仓库里提供了 GitHub Actions：当推送形如 `v1.2.3` 的 tag 时，会运行构建、打包，并自动创建 GitHub Release 且附带 `*.tgz`（工作流：`.github/workflows/release.yml`）。
 
