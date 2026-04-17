@@ -16,9 +16,9 @@ const tag = `v${version}`;
 
 try {
     const tags = sh('git', ['tag', '--list', tag]);
-    if (tags === tag) {
-        console.log(`Tag already exists: ${tag}`);
-        process.exit(0);
+    const tagExists = tags === tag;
+    if (tagExists) {
+        console.log(`Tag already exists locally: ${tag}`);
     }
 
     // Require clean working tree to avoid tagging dirty state.
@@ -29,8 +29,10 @@ try {
     }
 
     // Use annotated tag so it can be pushed by --follow-tags and is more release-friendly.
-    execFileSync('git', ['tag', '-a', tag, '-m', tag], { stdio: 'inherit' });
-    console.log(`Created tag: ${tag}`);
+    if (!tagExists) {
+        execFileSync('git', ['tag', '-a', tag, '-m', tag], { stdio: 'inherit' });
+        console.log(`Created tag: ${tag}`);
+    }
 
     const remotes = sh('git', ['remote']);
     if (!remotes) {
@@ -40,8 +42,9 @@ try {
 
     const hasOrigin = remotes.split(/\s+/).includes('origin');
     const remoteName = hasOrigin ? 'origin' : remotes.split(/\s+/)[0];
+    // If tag already exists on remote, this is a no-op.
     execFileSync('git', ['push', remoteName, tag], { stdio: 'inherit' });
-    console.log(`Pushed tag to ${remoteName}: ${tag}`);
+    console.log(`Ensured tag on ${remoteName}: ${tag}`);
 } catch (err) {
     console.error(err && err.message ? err.message : err);
     process.exit(1);
