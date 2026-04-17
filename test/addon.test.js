@@ -18,6 +18,9 @@ test('exports shape', () => {
     assert.equal(typeof robot.rightClick, 'function');
     assert.equal(typeof robot.getMousePos, 'function');
     assert.equal(typeof robot.moveMouse, 'function');
+    assert.equal(typeof robot.keyDown, 'function');
+    assert.equal(typeof robot.keyUp, 'function');
+    assert.equal(typeof robot.keyTap, 'function');
 });
 
 test('getMousePos returns numbers', () => {
@@ -41,4 +44,14 @@ test('moveMouse validates args (no side effects)', () => {
 test('click validates args (no side effects)', () => {
     assert.throws(() => robot.leftClick({ x: 1 }), /x and y/);
     assert.throws(() => robot.rightClick('a', 'b'), /Usage:/);
+});
+
+test('keyboard validates args (no side effects)', () => {
+    assert.throws(() => robot.keyDown(), /Key is required/);
+    assert.throws(() => robot.keyUp(), /Key is required/);
+    assert.throws(() => robot.keyTap(), /Key is required/);
+    assert.throws(() => robot.keyDown('a', {}), /Usage: keyDown\(key\)/);
+    assert.throws(() => robot.keyUp('a', {}), /Usage: keyUp\(key\)/);
+    assert.throws(() => robot.keyTap('a', 'bad'), /Modifiers must be an object/);
+    assert.throws(() => robot.keyTap('unknown_key_name'), /Unsupported key name/);
 });

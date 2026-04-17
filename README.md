@@ -20,7 +20,7 @@
 
 - 目前实现基于 X11（Wayland 环境可能不可用）
 - 需要安装依赖（以 Debian/Ubuntu 为例）：
-	- `sudo apt-get install -y libx11-dev libxtst-dev`
+  - `sudo apt-get install -y libx11-dev libxtst-dev`
 
 开发流程（需求 → 开发 → 测试 → 编译 → 发布）：见 `DEVELOPMENT.md`。
 
@@ -51,6 +51,14 @@ robot.rightClick(200, 200);
 
 // 也支持对象形式
 robot.leftClick({ x: 300, y: 400 });
+
+// 键盘：单键按下/抬起
+robot.keyDown("a");
+robot.keyUp("a");
+
+// 键盘：组合键（一次性点击）
+robot.keyTap("a", { meta: true }); // macOS 上相当于 Command+A
+robot.keyTap("c", { ctrl: true }); // Windows/Linux 上相当于 Ctrl+C
 ```
 
 也可以直接跑 demo：
@@ -66,3 +74,18 @@ npm run demo
 - `leftClick({x, y})` / `rightClick({x, y})`
 - `getMousePos()`：返回 `{x, y}`
 - `moveMouse(x, y)` / `moveMouse({x, y})`：移动鼠标到指定坐标
+- `keyDown(key)`：按下键（不带修饰键参数）
+- `keyUp(key)`：抬起键（不带修饰键参数）
+- `keyTap(key, [modifiers])`：点击键（可选修饰键）
+
+### 键盘参数说明
+
+- `key`：支持字符串键名或数字（数字为平台原生键码，不建议跨平台复用）
+- `modifiers`：`{ shift?: boolean, ctrl?: boolean, alt?: boolean, meta?: boolean }`
+
+### 常用键名（字符串）
+
+- 字母：`a`-`z`
+- 数字：`0`-`9`
+- 功能键：`enter`/`return`、`tab`、`space`、`backspace`、`esc`/`escape`
+- 方向键：`left`、`right`、`up`、`down`

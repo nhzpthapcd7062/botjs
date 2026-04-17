@@ -1,6 +1,8 @@
 #include <napi.h>
 
 #include <optional>
+#include <string>
+#include <unordered_map>
 #include <stdexcept>
 
 #if defined(__APPLE__)
@@ -10,6 +12,7 @@
 #include <windows.h>
 #elif defined(__linux__)
 #include <X11/Xlib.h>
+#include <X11/keysym.h>
 #include <X11/extensions/XTest.h>
 #else
 #error "Unsupported platform"
@@ -25,6 +28,13 @@ struct Point {
 enum class MouseButton {
   Left,
   Right,
+};
+
+struct Modifiers {
+  bool shift = false;
+  bool ctrl = false;
+  bool alt = false;
+  bool meta = false;
 };
 
 #if defined(__APPLE__)
@@ -77,6 +87,19 @@ void MoveMouseTo(Point location) {
   CFRelease(move);
 }
 
+using NativeKeyCode = uint16_t; // CGKeyCode
+
+void PostKeyEvent(NativeKeyCode key, bool down) {
+  CGEventRef ev = CGEventCreateKeyboardEvent(nullptr, static_cast<CGKeyCode>(key), down);
+  if (!ev) {
+    throw std::runtime_error("Failed to create keyboard event");
+  }
+  CGEventPost(kCGHIDEventTap, ev);
+  CFRelease(ev);
+}
+
+#elif defined(_WIN32)
+
 #elif defined(_WIN32)
 
 Point GetCurrentMouseLocation() {
@@ -115,6 +138,20 @@ void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocatio
   UINT sent = SendInput(2, inputs, sizeof(INPUT));
   if (sent != 2) {
     throw std::runtime_error("SendInput failed");
+  }
+}
+
+using NativeKeyCode = WORD; // Virtual-Key code
+
+void PostKeyEvent(NativeKeyCode vk, bool down) {
+  INPUT input;
+  ZeroMemory(&input, sizeof(input));
+  input.type = INPUT_KEYBOARD;
+  input.ki.wVk = vk;
+  input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+  UINT sent = SendInput(1, &input, sizeof(INPUT));
+  if (sent != 1) {
+    throw std::runtime_error("SendInput(keyboard) failed");
   }
 }
 
@@ -186,7 +223,347 @@ void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocatio
   XFlush(display);
 }
 
+using NativeKeyCode = KeyCode; // X11 keycode
+
+NativeKeyCode KeysymToKeyCode(Display* display, KeySym keysym) {
+  KeyCode code = XKeysymToKeycode(display, keysym);
+  if (code == 0) {
+    throw std::runtime_error("XKeysymToKeycode failed");
+  }
+  return code;
+}
+
+void PostKeyEvent(Display* display, NativeKeyCode code, bool down) {
+  if (!XTestFakeKeyEvent(display, code, down ? True : False, CurrentTime)) {
+    throw std::runtime_error("XTestFakeKeyEvent failed");
+  }
+  XFlush(display);
+}
+
 #endif
+
+std::string ToLower(std::string s) {
+  for (auto& ch : s) {
+    if (ch >= 'A' && ch <= 'Z') {
+      ch = static_cast<char>(ch - 'A' + 'a');
+    }
+  }
+  return s;
+}
+
+Modifiers ParseOptionalModifiers(const Napi::Env& env, const Napi::Value& v) {
+  Modifiers m;
+  if (v.IsUndefined() || v.IsNull()) {
+    return m;
+  }
+  if (!v.IsObject()) {
+    throw Napi::TypeError::New(env, "Modifiers must be an object");
+  }
+  Napi::Object o = v.As<Napi::Object>();
+  auto getBool = [&](const char* key) -> bool {
+    if (!o.Has(key)) return false;
+    return o.Get(key).ToBoolean().Value();
+  };
+  m.shift = getBool("shift");
+  m.ctrl = getBool("ctrl") || getBool("control");
+  m.alt = getBool("alt") || getBool("option");
+  m.meta = getBool("meta") || getBool("cmd") || getBool("command") || getBool("win");
+  return m;
+}
+
+// Map key name to native key code.
+// Note: key codes are layout-dependent on macOS; this mapping matches US ANSI layout.
+NativeKeyCode KeyNameToNativeKeyCode(const std::string& keyName) {
+  const std::string k = ToLower(keyName);
+
+#if defined(__APPLE__)
+  static const std::unordered_map<std::string, NativeKeyCode> map = {
+      {"a", 0},   {"s", 1},   {"d", 2},   {"f", 3},   {"h", 4},   {"g", 5},
+      {"z", 6},   {"x", 7},   {"c", 8},   {"v", 9},   {"b", 11},  {"q", 12},
+      {"w", 13},  {"e", 14},  {"r", 15},  {"y", 16},  {"t", 17},  {"1", 18},
+      {"2", 19},  {"3", 20},  {"4", 21},  {"6", 22},  {"5", 23},  {"=", 24},
+      {"9", 25},  {"7", 26},  {"-", 27},  {"8", 28},  {"0", 29},  {"]", 30},
+      {"o", 31},  {"u", 32},  {"[", 33},  {"i", 34},  {"p", 35},  {"l", 37},
+      {"j", 38},  {"'", 39},  {"k", 40},  {";", 41},  {"\\", 42}, {",", 43},
+      {"/", 44},  {"n", 45},  {"m", 46},  {".", 47},  {"`", 50},
+      {"enter", 36},
+      {"return", 36},
+      {"tab", 48},
+      {"space", 49},
+      {"backspace", 51},
+      {"delete", 51},
+      {"esc", 53},
+      {"escape", 53},
+      {"left", 123},
+      {"right", 124},
+      {"down", 125},
+      {"up", 126},
+      {"shift", 56},
+      {"control", 59},
+      {"ctrl", 59},
+      {"alt", 58},
+      {"option", 58},
+      {"meta", 55},
+      {"cmd", 55},
+      {"command", 55},
+  };
+  auto it = map.find(k);
+  if (it == map.end()) {
+    throw std::runtime_error("Unsupported key name: " + keyName);
+  }
+  return it->second;
+
+#elif defined(_WIN32)
+  if (k.size() == 1) {
+    char ch = k[0];
+    if (ch >= 'a' && ch <= 'z') {
+      return static_cast<NativeKeyCode>('A' + (ch - 'a'));
+    }
+    if (ch >= '0' && ch <= '9') {
+      return static_cast<NativeKeyCode>('0' + (ch - '0'));
+    }
+  }
+  static const std::unordered_map<std::string, NativeKeyCode> map = {
+      {"enter", VK_RETURN},
+      {"return", VK_RETURN},
+      {"tab", VK_TAB},
+      {"space", VK_SPACE},
+      {"backspace", VK_BACK},
+      {"delete", VK_BACK},
+      {"esc", VK_ESCAPE},
+      {"escape", VK_ESCAPE},
+      {"left", VK_LEFT},
+      {"right", VK_RIGHT},
+      {"up", VK_UP},
+      {"down", VK_DOWN},
+      {"shift", VK_LSHIFT},
+      {"control", VK_LCONTROL},
+      {"ctrl", VK_LCONTROL},
+      {"alt", VK_LMENU},
+      {"meta", VK_LWIN},
+      {"win", VK_LWIN},
+  };
+  auto it = map.find(k);
+  if (it == map.end()) {
+    throw std::runtime_error("Unsupported key name: " + keyName);
+  }
+  return it->second;
+
+#elif defined(__linux__)
+  // For Linux, we map names to KeySym first and convert to KeyCode when posting.
+  // This function returns a sentinel; actual conversion happens in Linux branch below.
+  (void)k;
+  (void)keyName;
+  throw std::runtime_error("KeyNameToNativeKeyCode should not be used on Linux");
+
+#endif
+}
+
+#if defined(__linux__)
+KeySym KeyNameToKeysym(const std::string& keyName) {
+  const std::string k = ToLower(keyName);
+  if (k.size() == 1) {
+    char ch = k[0];
+    if (ch >= 'a' && ch <= 'z') {
+      return static_cast<KeySym>(XK_a + (ch - 'a'));
+    }
+    if (ch >= '0' && ch <= '9') {
+      return static_cast<KeySym>(XK_0 + (ch - '0'));
+    }
+  }
+  static const std::unordered_map<std::string, KeySym> map = {
+      {"enter", XK_Return},
+      {"return", XK_Return},
+      {"tab", XK_Tab},
+      {"space", XK_space},
+      {"backspace", XK_BackSpace},
+      {"delete", XK_BackSpace},
+      {"esc", XK_Escape},
+      {"escape", XK_Escape},
+      {"left", XK_Left},
+      {"right", XK_Right},
+      {"up", XK_Up},
+      {"down", XK_Down},
+      {"shift", XK_Shift_L},
+      {"control", XK_Control_L},
+      {"ctrl", XK_Control_L},
+      {"alt", XK_Alt_L},
+      {"meta", XK_Super_L},
+      {"super", XK_Super_L},
+  };
+  auto it = map.find(k);
+  if (it == map.end()) {
+    throw std::runtime_error("Unsupported key name: " + keyName);
+  }
+  return it->second;
+}
+#endif
+
+struct ParsedKey {
+  bool isNativeCode = false;
+  uint32_t nativeCode = 0;
+  std::string name;
+};
+
+ParsedKey ParseKeyArg(const Napi::CallbackInfo& info, size_t index) {
+  Napi::Env env = info.Env();
+  if (info.Length() <= index) {
+    throw Napi::TypeError::New(env, "Key is required");
+  }
+  if (info[index].IsString()) {
+    ParsedKey k;
+    k.isNativeCode = false;
+    k.name = info[index].ToString().Utf8Value();
+    return k;
+  }
+  if (info[index].IsNumber()) {
+    ParsedKey k;
+    k.isNativeCode = true;
+    double v = info[index].ToNumber().DoubleValue();
+    if (v < 0) {
+      throw Napi::TypeError::New(env, "Key code must be non-negative");
+    }
+    k.nativeCode = static_cast<uint32_t>(v);
+    return k;
+  }
+  throw Napi::TypeError::New(env, "Key must be a string or a number");
+}
+
+void KeyDownUpNoModifiers(const ParsedKey& key, bool down) {
+#if defined(__linux__)
+  XDisplay d;
+  Display* display = d.get();
+  KeyCode kc;
+  if (key.isNativeCode) {
+    kc = static_cast<KeyCode>(key.nativeCode);
+  } else {
+    KeySym ks = KeyNameToKeysym(key.name);
+    kc = KeysymToKeyCode(display, ks);
+  }
+  PostKeyEvent(display, kc, down);
+#else
+  NativeKeyCode kc;
+  if (key.isNativeCode) {
+    kc = static_cast<NativeKeyCode>(key.nativeCode);
+  } else {
+    kc = KeyNameToNativeKeyCode(key.name);
+  }
+  PostKeyEvent(kc, down);
+#endif
+}
+
+void KeyTapWithModifiers(const ParsedKey& key, const Modifiers& mods) {
+#if defined(__linux__)
+  XDisplay d;
+  Display* display = d.get();
+
+  auto postModifier = [&](const char* name, bool down) {
+    KeySym ks = KeyNameToKeysym(name);
+    KeyCode kc = KeysymToKeyCode(display, ks);
+    PostKeyEvent(display, kc, down);
+  };
+
+  if (mods.shift) postModifier("shift", true);
+  if (mods.ctrl) postModifier("ctrl", true);
+  if (mods.alt) postModifier("alt", true);
+  if (mods.meta) postModifier("meta", true);
+
+  KeyCode mainKc;
+  if (key.isNativeCode) {
+    mainKc = static_cast<KeyCode>(key.nativeCode);
+  } else {
+    KeySym mainKs = KeyNameToKeysym(key.name);
+    mainKc = KeysymToKeyCode(display, mainKs);
+  }
+  PostKeyEvent(display, mainKc, true);
+  PostKeyEvent(display, mainKc, false);
+
+  if (mods.meta) postModifier("meta", false);
+  if (mods.alt) postModifier("alt", false);
+  if (mods.ctrl) postModifier("ctrl", false);
+  if (mods.shift) postModifier("shift", false);
+
+#else
+  auto postModifier = [&](const char* name, bool down) {
+    NativeKeyCode kc = KeyNameToNativeKeyCode(name);
+    PostKeyEvent(kc, down);
+  };
+
+  if (mods.shift) postModifier("shift", true);
+  if (mods.ctrl) postModifier("ctrl", true);
+  if (mods.alt) postModifier("alt", true);
+  if (mods.meta) postModifier("meta", true);
+
+  NativeKeyCode main;
+  if (key.isNativeCode) {
+    main = static_cast<NativeKeyCode>(key.nativeCode);
+  } else {
+    main = KeyNameToNativeKeyCode(key.name);
+  }
+  PostKeyEvent(main, true);
+  PostKeyEvent(main, false);
+
+  if (mods.meta) postModifier("meta", false);
+  if (mods.alt) postModifier("alt", false);
+  if (mods.ctrl) postModifier("ctrl", false);
+  if (mods.shift) postModifier("shift", false);
+#endif
+}
+
+Napi::Value KeyDown(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  try {
+    ParsedKey key = ParseKeyArg(info, 0);
+    if (info.Length() >= 2) {
+      throw Napi::TypeError::New(env, "Usage: keyDown(key)");
+    }
+    KeyDownUpNoModifiers(key, true);
+    return env.Undefined();
+  } catch (const Napi::Error& e) {
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+}
+
+Napi::Value KeyUp(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  try {
+    ParsedKey key = ParseKeyArg(info, 0);
+    if (info.Length() >= 2) {
+      throw Napi::TypeError::New(env, "Usage: keyUp(key)");
+    }
+    KeyDownUpNoModifiers(key, false);
+    return env.Undefined();
+  } catch (const Napi::Error& e) {
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+}
+
+Napi::Value KeyTap(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  try {
+    ParsedKey key = ParseKeyArg(info, 0);
+    Modifiers mods = (info.Length() >= 2) ? ParseOptionalModifiers(env, info[1]) : Modifiers{};
+    if (info.Length() >= 3) {
+      throw Napi::TypeError::New(env, "Usage: keyTap(key, [modifiers])");
+    }
+    KeyTapWithModifiers(key, mods);
+    return env.Undefined();
+  } catch (const Napi::Error& e) {
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+}
 
 std::optional<Point> ParseOptionalPoint(const Napi::CallbackInfo& info) {
   if (info.Length() == 0) {
@@ -299,6 +676,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("rightClick", Napi::Function::New(env, RightClick));
   exports.Set("getMousePos", Napi::Function::New(env, GetMousePos));
   exports.Set("moveMouse", Napi::Function::New(env, MoveMouse));
+  exports.Set("keyDown", Napi::Function::New(env, KeyDown));
+  exports.Set("keyUp", Napi::Function::New(env, KeyUp));
+  exports.Set("keyTap", Napi::Function::New(env, KeyTap));
   return exports;
 }
 
