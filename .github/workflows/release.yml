@@ -6,8 +6,36 @@ on:
       - "v*.*.*"
 
 jobs:
-  build-artifact-macos:
+  build-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Linux native deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev
+
+      - name: Build + test
+        run: npm test
+
+  github-release:
     runs-on: macos-latest
+    needs: build-test
 
     permissions:
       contents: write
@@ -23,17 +51,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build
-
       - name: Pack
         run: npm pack
-
-      - name: Upload npm tarball
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-tarball
-          path: "*.tgz"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

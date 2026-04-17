@@ -11,13 +11,28 @@
       ],
       "cflags_cc": [ "-std=c++17" ],
       "defines": [ "NAPI_CPP_EXCEPTIONS" ],
-      "xcode_settings": {
-        "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
-        "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
-        "MACOSX_DEPLOYMENT_TARGET": "10.13"
-      },
-      "libraries": [
-        "-framework ApplicationServices"
+      "conditions": [
+        ["OS=='mac'", {
+          "xcode_settings": {
+            "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+            "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
+            "MACOSX_DEPLOYMENT_TARGET": "10.13"
+          },
+          "libraries": [
+            "-framework ApplicationServices"
+          ]
+        }],
+        ["OS=='win'", {
+          "libraries": [
+            "User32.lib"
+          ]
+        }],
+        ["OS=='linux'", {
+          "libraries": [
+            "-lX11",
+            "-lXtst"
+          ]
+        }]
       ]
     }
   ]

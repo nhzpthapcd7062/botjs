@@ -21,6 +21,11 @@ test('exports shape', () => {
 });
 
 test('getMousePos returns numbers', () => {
+    if (process.platform === 'linux' && !process.env.DISPLAY) {
+        assert.throws(() => robot.getMousePos());
+        return;
+    }
+
     const pos = robot.getMousePos();
     assert.ok(pos && typeof pos === 'object');
     assert.equal(typeof pos.x, 'number');

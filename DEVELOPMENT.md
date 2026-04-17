@@ -2,6 +2,8 @@
 
 本文档以本仓库（macOS + Node.js 原生插件 N-API）为例，给出一套可执行的端到端流程。
 
+当前代码已支持多端：macOS / Windows / Linux（Linux 以 X11 为主，Wayland 可能不可用）。
+
 ## 1. 需求（Requirement）
 
 - 明确 API 形态：同步/异步、参数格式、返回值
@@ -20,6 +22,10 @@
 - 安装 Xcode Command Line Tools：
   - `xcode-select --install`
 - Node.js：建议 18/20/22
+
+Linux 额外依赖（Debian/Ubuntu）：
+
+- `sudo apt-get install -y libx11-dev libxtst-dev`
 
 ### 本地开发命令
 

@@ -5,11 +5,12 @@ on:
   pull_request:
 
 jobs:
-  build-test-macos:
-    runs-on: macos-latest
+  build-test:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
         node: [18, 20, 22]
 
     steps:
@@ -22,6 +23,12 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Install Linux native deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev
 
       - name: Build + test
         run: npm test
