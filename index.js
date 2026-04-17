@@ -1,8 +1,26 @@
 const fs = require("fs");
 const path = require("path");
 
+function assertSupportedPlatform() {
+    const platform = process.platform;
+    const arch = process.arch;
+
+    const ok =
+        (platform === "darwin" && arch === "arm64") ||
+        (platform === "win32" && arch === "x64");
+
+    if (!ok) {
+        throw new Error(
+            `Unsupported platform/arch: ${platform}/${arch}. ` +
+            "This package targets macOS arm64 and Windows x64 only."
+        );
+    }
+}
+
 // node-gyp 默认输出到 build/Release/<target_name>.node
 function loadAddon() {
+    assertSupportedPlatform();
+
     const releaseDir = path.join(__dirname, "build", "Release");
     const expected = path.join(releaseDir, "crobot.node");
 
