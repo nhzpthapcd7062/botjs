@@ -1,0 +1,16 @@
+{
+    "name": "c-robot",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Node.js native addon (C++) for mouse left/right click on macOS",
+    "main": "index.js",
+    "gypfile": true,
+    "scripts": {
+        "build": "node-gyp rebuild",
+        "clean": "node-gyp clean",
+        "demo": "node demo.js"
+    },
+    "dependencies": {
+        "node-addon-api": "^8.5.0"
+    }
+}
