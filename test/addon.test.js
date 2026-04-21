@@ -15,6 +15,7 @@ function test(name, fn) {
 
 test('exports shape', () => {
     assert.equal(typeof robot.leftClick, 'function');
+    assert.equal(typeof robot.leftDoubleClick, 'function');
     assert.equal(typeof robot.rightClick, 'function');
     assert.equal(typeof robot.getMousePos, 'function');
     assert.equal(typeof robot.moveMouse, 'function');
@@ -43,6 +44,7 @@ test('moveMouse validates args (no side effects)', () => {
 
 test('click validates args (no side effects)', () => {
     assert.throws(() => robot.leftClick({ x: 1 }), /x and y/);
+    assert.throws(() => robot.leftDoubleClick({ x: 1 }), /x and y/);
     assert.throws(() => robot.rightClick('a', 'b'), /Usage:/);
 });
 

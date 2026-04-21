@@ -49,7 +49,11 @@ Point GetCurrentMouseLocation() {
   return Point{location.x, location.y};
 }
 
-void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation) {
+void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation, int clickCount) {
+  if (clickCount <= 0) {
+    throw std::runtime_error("clickCount must be positive");
+  }
+
   Point location = maybeLocation.has_value() ? *maybeLocation : GetCurrentMouseLocation();
   CGPoint cgLocation = CGPointMake(location.x, location.y);
 
@@ -57,21 +61,27 @@ void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocatio
   CGEventType downType = (button == MouseButton::Left) ? kCGEventLeftMouseDown : kCGEventRightMouseDown;
   CGEventType upType = (button == MouseButton::Left) ? kCGEventLeftMouseUp : kCGEventRightMouseUp;
 
-  CGEventRef down = CGEventCreateMouseEvent(nullptr, downType, cgLocation, cgButton);
-  if (!down) {
-    throw std::runtime_error("Failed to create mouse down event");
-  }
-  CGEventRef up = CGEventCreateMouseEvent(nullptr, upType, cgLocation, cgButton);
-  if (!up) {
+  for (int i = 1; i <= clickCount; i++) {
+    CGEventRef down = CGEventCreateMouseEvent(nullptr, downType, cgLocation, cgButton);
+    if (!down) {
+      throw std::runtime_error("Failed to create mouse down event");
+    }
+    CGEventRef up = CGEventCreateMouseEvent(nullptr, upType, cgLocation, cgButton);
+    if (!up) {
+      CFRelease(down);
+      throw std::runtime_error("Failed to create mouse up event");
+    }
+
+    // For multi-click, macOS expects click state to be 1 for the first click, 2 for the second, etc.
+    CGEventSetIntegerValueField(down, kCGMouseEventClickState, i);
+    CGEventSetIntegerValueField(up, kCGMouseEventClickState, i);
+
+    CGEventPost(kCGHIDEventTap, down);
+    CGEventPost(kCGHIDEventTap, up);
+
     CFRelease(down);
-    throw std::runtime_error("Failed to create mouse up event");
+    CFRelease(up);
   }
-
-  CGEventPost(kCGHIDEventTap, down);
-  CGEventPost(kCGHIDEventTap, up);
-
-  CFRelease(down);
-  CFRelease(up);
 }
 
 void MoveMouseTo(Point location) {
@@ -116,7 +126,11 @@ void MoveMouseTo(Point location) {
   }
 }
 
-void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation) {
+void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation, int clickCount) {
+  if (clickCount <= 0) {
+    throw std::runtime_error("clickCount must be positive");
+  }
+
   if (maybeLocation.has_value()) {
     MoveMouseTo(*maybeLocation);
   }
@@ -124,18 +138,20 @@ void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocatio
   DWORD downFlag = (button == MouseButton::Left) ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_RIGHTDOWN;
   DWORD upFlag = (button == MouseButton::Left) ? MOUSEEVENTF_LEFTUP : MOUSEEVENTF_RIGHTUP;
 
-  INPUT inputs[2];
-  ZeroMemory(inputs, sizeof(inputs));
+  for (int i = 0; i < clickCount; i++) {
+    INPUT inputs[2];
+    ZeroMemory(inputs, sizeof(inputs));
 
-  inputs[0].type = INPUT_MOUSE;
-  inputs[0].mi.dwFlags = downFlag;
+    inputs[0].type = INPUT_MOUSE;
+    inputs[0].mi.dwFlags = downFlag;
 
-  inputs[1].type = INPUT_MOUSE;
-  inputs[1].mi.dwFlags = upFlag;
+    inputs[1].type = INPUT_MOUSE;
+    inputs[1].mi.dwFlags = upFlag;
 
-  UINT sent = SendInput(2, inputs, sizeof(INPUT));
-  if (sent != 2) {
-    throw std::runtime_error("SendInput failed");
+    UINT sent = SendInput(2, inputs, sizeof(INPUT));
+    if (sent != 2) {
+      throw std::runtime_error("SendInput failed");
+    }
   }
 }
 
@@ -201,7 +217,11 @@ void MoveMouseTo(Point location) {
   XFlush(display);
 }
 
-void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation) {
+void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation, int clickCount) {
+  if (clickCount <= 0) {
+    throw std::runtime_error("clickCount must be positive");
+  }
+
   XDisplay d;
   Display* display = d.get();
   Window root = DefaultRootWindow(display);
@@ -212,11 +232,13 @@ void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocatio
   }
 
   int buttonNumber = (button == MouseButton::Left) ? 1 : 3;
-  if (!XTestFakeButtonEvent(display, buttonNumber, True, CurrentTime)) {
-    throw std::runtime_error("XTestFakeButtonEvent(down) failed");
-  }
-  if (!XTestFakeButtonEvent(display, buttonNumber, False, CurrentTime)) {
-    throw std::runtime_error("XTestFakeButtonEvent(up) failed");
+  for (int i = 0; i < clickCount; i++) {
+    if (!XTestFakeButtonEvent(display, buttonNumber, True, CurrentTime)) {
+      throw std::runtime_error("XTestFakeButtonEvent(down) failed");
+    }
+    if (!XTestFakeButtonEvent(display, buttonNumber, False, CurrentTime)) {
+      throw std::runtime_error("XTestFakeButtonEvent(up) failed");
+    }
   }
   XFlush(display);
 }
@@ -611,7 +633,22 @@ Napi::Value LeftClick(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   try {
     auto pt = ParseOptionalPoint(info);
-    PostMouseClick(MouseButton::Left, pt);
+    PostMouseClick(MouseButton::Left, pt, 1);
+    return env.Undefined();
+  } catch (const Napi::Error& e) {
+    e.ThrowAsJavaScriptException();
+    return env.Undefined();
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+}
+
+Napi::Value LeftDoubleClick(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  try {
+    auto pt = ParseOptionalPoint(info);
+    PostMouseClick(MouseButton::Left, pt, 2);
     return env.Undefined();
   } catch (const Napi::Error& e) {
     e.ThrowAsJavaScriptException();
@@ -626,7 +663,7 @@ Napi::Value RightClick(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   try {
     auto pt = ParseOptionalPoint(info);
-    PostMouseClick(MouseButton::Right, pt);
+    PostMouseClick(MouseButton::Right, pt, 1);
     return env.Undefined();
   } catch (const Napi::Error& e) {
     e.ThrowAsJavaScriptException();
@@ -671,6 +708,7 @@ Napi::Value MoveMouse(const Napi::CallbackInfo& info) {
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("leftClick", Napi::Function::New(env, LeftClick));
+  exports.Set("leftDoubleClick", Napi::Function::New(env, LeftDoubleClick));
   exports.Set("rightClick", Napi::Function::New(env, RightClick));
   exports.Set("getMousePos", Napi::Function::New(env, GetMousePos));
   exports.Set("moveMouse", Napi::Function::New(env, MoveMouse));
