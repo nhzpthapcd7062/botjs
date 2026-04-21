@@ -317,6 +317,38 @@ ParsedKey ParseKeyArg(const Napi::CallbackInfo& info, size_t index) {
   throw Napi::TypeError::New(env, "Key must be a string or a number");
 }
 
+std::optional<Point> ParsePoint(const Napi::CallbackInfo& info, bool required) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() == 0) {
+    if (required) {
+      throw Napi::TypeError::New(env, "Usage: fn(x, y) or fn({x, y})");
+    }
+    return std::nullopt;
+  }
+
+  if (info.Length() == 1 && info[0].IsObject()) {
+    Napi::Object obj = info[0].As<Napi::Object>();
+    if (!obj.Has("x") || !obj.Has("y")) {
+      throw Napi::TypeError::New(env, "Point object must have x and y");
+    }
+    double x = obj.Get("x").ToNumber().DoubleValue();
+    double y = obj.Get("y").ToNumber().DoubleValue();
+    return Point{x, y};
+  }
+
+  if (info.Length() >= 2 && info[0].IsNumber() && info[1].IsNumber()) {
+    double x = info[0].ToNumber().DoubleValue();
+    double y = info[1].ToNumber().DoubleValue();
+    return Point{x, y};
+  }
+
+  if (required) {
+    throw Napi::TypeError::New(env, "Usage: fn(x, y) or fn({x, y})");
+  }
+  throw Napi::TypeError::New(env, "Usage: fn(), fn(x, y) or fn({x, y})");
+}
+
 void KeyDownUpNoModifiers(const ParsedKey& key, bool down) {
   NativeKeyCode kc;
   if (key.isNativeCode) {
@@ -387,70 +419,28 @@ Napi::Value KeyTap(const Napi::CallbackInfo& info) {
   });
 }
 
-std::optional<Point> ParseOptionalPoint(const Napi::CallbackInfo& info) {
-  if (info.Length() == 0) {
-    return std::nullopt;
-  }
-
-  if (info.Length() == 1 && info[0].IsObject()) {
-    Napi::Object obj = info[0].As<Napi::Object>();
-    if (!obj.Has("x") || !obj.Has("y")) {
-      throw Napi::TypeError::New(info.Env(), "Point object must have x and y");
-    }
-    double x = obj.Get("x").ToNumber().DoubleValue();
-    double y = obj.Get("y").ToNumber().DoubleValue();
-    return Point{x, y};
-  }
-
-  if (info.Length() >= 2 && info[0].IsNumber() && info[1].IsNumber()) {
-    double x = info[0].ToNumber().DoubleValue();
-    double y = info[1].ToNumber().DoubleValue();
-    return Point{x, y};
-  }
-
-  throw Napi::TypeError::New(info.Env(), "Usage: fn(), fn(x, y) or fn({x, y})");
-}
-
-Point ParseRequiredPoint(const Napi::CallbackInfo& info) {
-  if (info.Length() == 1 && info[0].IsObject()) {
-    Napi::Object obj = info[0].As<Napi::Object>();
-    if (!obj.Has("x") || !obj.Has("y")) {
-      throw Napi::TypeError::New(info.Env(), "Point object must have x and y");
-    }
-    double x = obj.Get("x").ToNumber().DoubleValue();
-    double y = obj.Get("y").ToNumber().DoubleValue();
-    return Point{x, y};
-  }
-
-  if (info.Length() >= 2 && info[0].IsNumber() && info[1].IsNumber()) {
-    double x = info[0].ToNumber().DoubleValue();
-    double y = info[1].ToNumber().DoubleValue();
-    return Point{x, y};
-  }
-
-  throw Napi::TypeError::New(info.Env(), "Usage: fn(x, y) or fn({x, y})");
+void DoMouseClick(const Napi::CallbackInfo& info, MouseButton button, int clickCount) {
+  std::optional<Point> point = ParsePoint(info, false);
+  PostMouseClick(button, point, clickCount);
 }
 
 Napi::Value LeftClick(const Napi::CallbackInfo& info) {
   return RunSafely(info, [&](Napi::Env env) {
-    auto pt = ParseOptionalPoint(info);
-    PostMouseClick(MouseButton::Left, pt, 1);
+    DoMouseClick(info, MouseButton::Left, 1);
     return env.Undefined();
   });
 }
 
 Napi::Value LeftDoubleClick(const Napi::CallbackInfo& info) {
   return RunSafely(info, [&](Napi::Env env) {
-    auto pt = ParseOptionalPoint(info);
-    PostMouseClick(MouseButton::Left, pt, 2);
+    DoMouseClick(info, MouseButton::Left, 2);
     return env.Undefined();
   });
 }
 
 Napi::Value RightClick(const Napi::CallbackInfo& info) {
   return RunSafely(info, [&](Napi::Env env) {
-    auto pt = ParseOptionalPoint(info);
-    PostMouseClick(MouseButton::Right, pt, 1);
+    DoMouseClick(info, MouseButton::Right, 1);
     return env.Undefined();
   });
 }
@@ -467,7 +457,7 @@ Napi::Value GetMousePos(const Napi::CallbackInfo& info) {
 
 Napi::Value MoveMouse(const Napi::CallbackInfo& info) {
   return RunSafely(info, [&](Napi::Env env) {
-    Point pt = ParseRequiredPoint(info);
+    Point pt = *ParsePoint(info, true);
     MoveMouseTo(pt);
     return env.Undefined();
   });
