@@ -280,6 +280,19 @@ struct ParsedKey {
   std::string name;
 };
 
+template <typename Fn>
+Napi::Value RunSafely(const Napi::CallbackInfo& info, Fn&& fn) {
+  Napi::Env env = info.Env();
+  try {
+    return fn(env);
+  } catch (const Napi::Error& e) {
+    e.ThrowAsJavaScriptException();
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+  }
+  return env.Undefined();
+}
+
 ParsedKey ParseKeyArg(const Napi::CallbackInfo& info, size_t index) {
   Napi::Env env = info.Env();
   if (info.Length() <= index) {
@@ -341,44 +354,29 @@ void KeyTapWithModifiers(const ParsedKey& key, const Modifiers& mods) {
 }
 
 Napi::Value KeyDown(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     ParsedKey key = ParseKeyArg(info, 0);
     if (info.Length() >= 2) {
       throw Napi::TypeError::New(env, "Usage: keyDown(key)");
     }
     KeyDownUpNoModifiers(key, true);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Value KeyUp(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     ParsedKey key = ParseKeyArg(info, 0);
     if (info.Length() >= 2) {
       throw Napi::TypeError::New(env, "Usage: keyUp(key)");
     }
     KeyDownUpNoModifiers(key, false);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Value KeyTap(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     ParsedKey key = ParseKeyArg(info, 0);
     Modifiers mods = (info.Length() >= 2) ? ParseOptionalModifiers(env, info[1]) : Modifiers{};
     if (info.Length() >= 3) {
@@ -386,13 +384,7 @@ Napi::Value KeyTap(const Napi::CallbackInfo& info) {
     }
     KeyTapWithModifiers(key, mods);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 std::optional<Point> ParseOptionalPoint(const Napi::CallbackInfo& info) {
@@ -440,80 +432,45 @@ Point ParseRequiredPoint(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value LeftClick(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     auto pt = ParseOptionalPoint(info);
     PostMouseClick(MouseButton::Left, pt, 1);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Value LeftDoubleClick(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     auto pt = ParseOptionalPoint(info);
     PostMouseClick(MouseButton::Left, pt, 2);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Value RightClick(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     auto pt = ParseOptionalPoint(info);
     PostMouseClick(MouseButton::Right, pt, 1);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Value GetMousePos(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     Point pt = GetCurrentMouseLocation();
     Napi::Object obj = Napi::Object::New(env);
     obj.Set("x", Napi::Number::New(env, pt.x));
     obj.Set("y", Napi::Number::New(env, pt.y));
     return obj;
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Value MoveMouse(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  try {
+  return RunSafely(info, [&](Napi::Env env) {
     Point pt = ParseRequiredPoint(info);
     MoveMouseTo(pt);
     return env.Undefined();
-  } catch (const Napi::Error& e) {
-    e.ThrowAsJavaScriptException();
-    return env.Undefined();
-  } catch (const std::exception& e) {
-    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
+  });
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
