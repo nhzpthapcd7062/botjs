@@ -4,7 +4,7 @@
 
 兼容与打包编译目标（以此为准）：macOS Apple Silicon（arm64）与 Windows x64。
 
-备注：代码中保留了 Linux（X11）实现，但不作为兼容/打包编译目标。
+备注：当前仅支持 macOS arm64 与 Windows x64。
 
 ## 1. 需求（Requirement）
 
@@ -24,8 +24,6 @@
 - 安装 Xcode Command Line Tools：
   - `xcode-select --install`
 - Node.js：建议 18/20/22
-
-（可选）如果你本地要在 Linux 上尝试：需要 X11 相关依赖，但不保证兼容。
 
 ### 本地开发命令
 

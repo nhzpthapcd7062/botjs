@@ -21,10 +21,6 @@
 
 - 需要可用的 C++ 构建环境（例如安装 Visual Studio Build Tools）
 
-### Linux（不保证兼容）
-
-- 代码里保留了基于 X11 的实现，但不作为兼容/打包编译目标
-
 开发流程（需求 → 开发 → 测试 → 编译 → 发布）：见 `DEVELOPMENT.md`。
 
 ## 安装与构建
@@ -61,7 +57,7 @@ robot.keyUp("a");
 
 // 键盘：组合键（一次性点击）
 robot.keyTap("a", { meta: true }); // macOS 上相当于 Command+A
-robot.keyTap("c", { ctrl: true }); // Windows/Linux 上相当于 Ctrl+C
+robot.keyTap("c", { ctrl: true }); // Windows 上相当于 Ctrl+C
 ```
 
 也可以直接跑 demo：

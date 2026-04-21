@@ -10,10 +10,6 @@
 #elif defined(_WIN32)
 #define NOMINMAX
 #include <windows.h>
-#elif defined(__linux__)
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
-#include <X11/extensions/XTest.h>
 #else
 #error "Unsupported platform"
 #endif
@@ -107,7 +103,6 @@ void PostKeyEvent(NativeKeyCode key, bool down) {
   CGEventPost(kCGHIDEventTap, ev);
   CFRelease(ev);
 }
-
 #elif defined(_WIN32)
 
 Point GetCurrentMouseLocation() {
@@ -168,98 +163,6 @@ void PostKeyEvent(NativeKeyCode vk, bool down) {
     throw std::runtime_error("SendInput(keyboard) failed");
   }
 }
-
-#elif defined(__linux__)
-
-class XDisplay {
- public:
-  XDisplay() : display_(XOpenDisplay(nullptr)) {
-    if (!display_) {
-      throw std::runtime_error("X11 display not available (is DISPLAY set? are you on Wayland?)");
-    }
-  }
-  ~XDisplay() {
-    if (display_) {
-      XCloseDisplay(display_);
-    }
-  }
-  XDisplay(const XDisplay&) = delete;
-  XDisplay& operator=(const XDisplay&) = delete;
-
-  Display* get() const { return display_; }
-
- private:
-  Display* display_;
-};
-
-Point GetCurrentMouseLocation() {
-  XDisplay d;
-  Display* display = d.get();
-  Window root = DefaultRootWindow(display);
-
-  Window retRoot, retChild;
-  int rootX, rootY;
-  int winX, winY;
-  unsigned int mask;
-
-  Bool ok = XQueryPointer(display, root, &retRoot, &retChild, &rootX, &rootY, &winX, &winY, &mask);
-  if (!ok) {
-    throw std::runtime_error("XQueryPointer failed");
-  }
-  return Point{static_cast<double>(rootX), static_cast<double>(rootY)};
-}
-
-void MoveMouseTo(Point location) {
-  XDisplay d;
-  Display* display = d.get();
-  Window root = DefaultRootWindow(display);
-  XWarpPointer(display, None, root, 0, 0, 0, 0, static_cast<int>(location.x), static_cast<int>(location.y));
-  XFlush(display);
-}
-
-void PostMouseClick(MouseButton button, const std::optional<Point>& maybeLocation, int clickCount) {
-  if (clickCount <= 0) {
-    throw std::runtime_error("clickCount must be positive");
-  }
-
-  XDisplay d;
-  Display* display = d.get();
-  Window root = DefaultRootWindow(display);
-
-  if (maybeLocation.has_value()) {
-    XWarpPointer(display, None, root, 0, 0, 0, 0, static_cast<int>(maybeLocation->x), static_cast<int>(maybeLocation->y));
-    XFlush(display);
-  }
-
-  int buttonNumber = (button == MouseButton::Left) ? 1 : 3;
-  for (int i = 0; i < clickCount; i++) {
-    if (!XTestFakeButtonEvent(display, buttonNumber, True, CurrentTime)) {
-      throw std::runtime_error("XTestFakeButtonEvent(down) failed");
-    }
-    if (!XTestFakeButtonEvent(display, buttonNumber, False, CurrentTime)) {
-      throw std::runtime_error("XTestFakeButtonEvent(up) failed");
-    }
-  }
-  XFlush(display);
-}
-
-using NativeKeyCode = KeyCode; // X11 keycode
-
-NativeKeyCode KeysymToKeyCode(Display* display, KeySym keysym) {
-  KeyCode code = XKeysymToKeycode(display, keysym);
-  if (code == 0) {
-    throw std::runtime_error("XKeysymToKeycode failed");
-  }
-  return code;
-}
-
-void PostKeyEvent(Display* display, NativeKeyCode code, bool down) {
-  if (!XTestFakeKeyEvent(display, code, down ? True : False, CurrentTime)) {
-    throw std::runtime_error("XTestFakeKeyEvent failed");
-  }
-  XFlush(display);
-}
-
 #endif
 
 std::string ToLower(std::string s) {
@@ -368,56 +271,8 @@ NativeKeyCode KeyNameToNativeKeyCode(const std::string& keyName) {
     throw std::runtime_error("Unsupported key name: " + keyName);
   }
   return it->second;
-
-#elif defined(__linux__)
-  // For Linux, we map names to KeySym first and convert to KeyCode when posting.
-  // This function returns a sentinel; actual conversion happens in Linux branch below.
-  (void)k;
-  (void)keyName;
-  throw std::runtime_error("KeyNameToNativeKeyCode should not be used on Linux");
-
 #endif
 }
-
-#if defined(__linux__)
-KeySym KeyNameToKeysym(const std::string& keyName) {
-  const std::string k = ToLower(keyName);
-  if (k.size() == 1) {
-    char ch = k[0];
-    if (ch >= 'a' && ch <= 'z') {
-      return static_cast<KeySym>(XK_a + (ch - 'a'));
-    }
-    if (ch >= '0' && ch <= '9') {
-      return static_cast<KeySym>(XK_0 + (ch - '0'));
-    }
-  }
-  static const std::unordered_map<std::string, KeySym> map = {
-      {"enter", XK_Return},
-      {"return", XK_Return},
-      {"tab", XK_Tab},
-      {"space", XK_space},
-      {"backspace", XK_BackSpace},
-      {"delete", XK_BackSpace},
-      {"esc", XK_Escape},
-      {"escape", XK_Escape},
-      {"left", XK_Left},
-      {"right", XK_Right},
-      {"up", XK_Up},
-      {"down", XK_Down},
-      {"shift", XK_Shift_L},
-      {"control", XK_Control_L},
-      {"ctrl", XK_Control_L},
-      {"alt", XK_Alt_L},
-      {"meta", XK_Super_L},
-      {"super", XK_Super_L},
-  };
-  auto it = map.find(k);
-  if (it == map.end()) {
-    throw std::runtime_error("Unsupported key name: " + keyName);
-  }
-  return it->second;
-}
-#endif
 
 struct ParsedKey {
   bool isNativeCode = false;
@@ -450,18 +305,6 @@ ParsedKey ParseKeyArg(const Napi::CallbackInfo& info, size_t index) {
 }
 
 void KeyDownUpNoModifiers(const ParsedKey& key, bool down) {
-#if defined(__linux__)
-  XDisplay d;
-  Display* display = d.get();
-  KeyCode kc;
-  if (key.isNativeCode) {
-    kc = static_cast<KeyCode>(key.nativeCode);
-  } else {
-    KeySym ks = KeyNameToKeysym(key.name);
-    kc = KeysymToKeyCode(display, ks);
-  }
-  PostKeyEvent(display, kc, down);
-#else
   NativeKeyCode kc;
   if (key.isNativeCode) {
     kc = static_cast<NativeKeyCode>(key.nativeCode);
@@ -469,41 +312,9 @@ void KeyDownUpNoModifiers(const ParsedKey& key, bool down) {
     kc = KeyNameToNativeKeyCode(key.name);
   }
   PostKeyEvent(kc, down);
-#endif
 }
 
 void KeyTapWithModifiers(const ParsedKey& key, const Modifiers& mods) {
-#if defined(__linux__)
-  XDisplay d;
-  Display* display = d.get();
-
-  auto postModifier = [&](const char* name, bool down) {
-    KeySym ks = KeyNameToKeysym(name);
-    KeyCode kc = KeysymToKeyCode(display, ks);
-    PostKeyEvent(display, kc, down);
-  };
-
-  if (mods.shift) postModifier("shift", true);
-  if (mods.ctrl) postModifier("ctrl", true);
-  if (mods.alt) postModifier("alt", true);
-  if (mods.meta) postModifier("meta", true);
-
-  KeyCode mainKc;
-  if (key.isNativeCode) {
-    mainKc = static_cast<KeyCode>(key.nativeCode);
-  } else {
-    KeySym mainKs = KeyNameToKeysym(key.name);
-    mainKc = KeysymToKeyCode(display, mainKs);
-  }
-  PostKeyEvent(display, mainKc, true);
-  PostKeyEvent(display, mainKc, false);
-
-  if (mods.meta) postModifier("meta", false);
-  if (mods.alt) postModifier("alt", false);
-  if (mods.ctrl) postModifier("ctrl", false);
-  if (mods.shift) postModifier("shift", false);
-
-#else
   auto postModifier = [&](const char* name, bool down) {
     NativeKeyCode kc = KeyNameToNativeKeyCode(name);
     PostKeyEvent(kc, down);
@@ -527,7 +338,6 @@ void KeyTapWithModifiers(const ParsedKey& key, const Modifiers& mods) {
   if (mods.alt) postModifier("alt", false);
   if (mods.ctrl) postModifier("ctrl", false);
   if (mods.shift) postModifier("shift", false);
-#endif
 }
 
 Napi::Value KeyDown(const Napi::CallbackInfo& info) {

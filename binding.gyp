@@ -26,12 +26,6 @@
           "libraries": [
             "User32.lib"
           ]
-        }],
-        ["OS=='linux'", {
-          "libraries": [
-            "-lX11",
-            "-lXtst"
-          ]
         }]
       ]
     }
